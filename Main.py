@@ -2,7 +2,6 @@ from pyexpat import model
 from re import T
 from select import select
 from tabnanny import verbose
-import DeepImageSearch.config as config
 import os
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -12,78 +11,25 @@ import numpy as np
 from annoy import AnnoyIndex
 from tqdm import tqdm
 from tensorflow.keras.preprocessing import image
-from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input
+from tensorflow.keras.applications.vgg16 import VGG16, preprocess_input,decode_predictions
 from tensorflow.keras.models import Model
 from tensorflow.keras import layers,models
 import tensorflow.keras as keras
 from tensorflow.keras.callbacks import EarlyStopping
 import tensorflow_datasets as tfds
 from tensorflow.keras.utils import to_categorical
+from tensorflow.keras.utils import plot_model
 from keras.preprocessing.image import ImageDataGenerator
+from keras.layers import Input, Lambda, Dense, Flatten
 import tensorflow as tf
 import matplotlib.pyplot as plt
 import matplotlib.image as img
+import config
+from glob import glob
+import glob as gb
 
 import scipy
 tf.compat.v1.logging.set_verbosity(tf.compat.v1.logging.ERROR)
-
-datasetdir = "D:\Project\Final Year\Friend Rcommndation System\FInal\\fi\Images"
-os.chdir(datasetdir)
-
-class Accuracy:
-
-    def generators(shape, preprocessing):
-
-        batch_size = 30 
-
-        imgdatagen = ImageDataGenerator(
-            preprocessing_function = preprocessing,
-            horizontal_flip = True, 
-            validation_split = 0.1,
-        )
-
-        height, width = shape
-
-        train_dataset = imgdatagen.flow_from_directory(
-            os.getcwd(),
-            target_size = (height, width), 
-            classes = ('query','training'),
-            batch_size = batch_size,
-            subset = 'training', 
-        )
-
-        val_dataset = imgdatagen.flow_from_directory(
-            os.getcwd(),
-            target_size = (height, width), 
-            classes = ('query','training'),
-            batch_size = batch_size,
-            subset = 'validation'
-        )
-        return train_dataset, val_dataset
-
-    def plot_history(history, yrange):
-        acc = history.history['acc']
-        val_acc = history.history['val_acc']
-        loss = history.history['loss']
-        val_loss = history.history['val_loss']
-
-        epochs = range(len(acc))
-
-        plt.plot(epochs, acc)
-        plt.plot(epochs, val_acc)
-        plt.title('Training and validation accuracy')
-        plt.ylim(yrange)
-
-        plt.figure()
-
-        plt.plot(epochs, loss)
-        plt.plot(epochs, val_loss)
-        plt.title('Training and validation loss')
-
-        plt.show()
-    
-
-
     
 
 class LoadData:
@@ -124,32 +70,122 @@ class FeatureExtractor:
                 features.append(None)
                 continue
         return features
-    def acc(self):
-        vgg16 = keras.applications.vgg16
-        train_dataset, val_dataset = Accuracy.generators((224,224), preprocessing=vgg16.preprocess_input)
-        conv_model = vgg16.VGG16(weights='imagenet', include_top=False, input_shape=(224,224,3))
-        x = keras.layers.Flatten()(conv_model.output)
-        x = keras.layers.Dense(100, activation='relu')(x)
-        x = keras.layers.Dense(100, activation='relu')(x)
-        x = keras.layers.Dense(100, activation='relu')(x)
 
-        predictions = keras.layers.Dense(2, activation='softmax')(x)
-
-        full_model = keras.models.Model(inputs=conv_model.input, outputs=predictions)
-        full_model.summary()
-        for layer in conv_model.layers:
-            layer.trainable = False
-        full_model.compile(loss='binary_crossentropy',
-                  optimizer=keras.optimizers.Adamax(learning_rate=0.001),
-                  metrics=['acc'])
-        history = full_model.fit(
-            train_dataset, 
-            validation_data = val_dataset,
-            workers=10,
-            epochs=5,
+    def results(self):
+        tf.keras.applications.VGG16(
+            include_top=True,
+            weights="imagenet",
+            input_tensor=None,
+            input_shape=None,
+            pooling=None,
+            classes=1000,
+            classifier_activation="softmax",
         )
-        Accuracy.plot_history(history, yrange=(0.9,1))
+        model = VGG16()
         
+        plot_model(model, to_file='vgg_model.png')
+
+        model.summary()
+
+        filePath = "D:\Project\Final Year\Friend Rcommndation System\Final 2\\vggImagenet\\blurpexels-anthony-133394.jpg"
+
+        image1 = image.load_img(filePath, target_size = (224, 224))
+
+        transformedImage = image.img_to_array(image1)
+
+        transformedImage = np.expand_dims(transformedImage, axis = 0)
+
+        transformedImage = preprocess_input(transformedImage)
+
+        prediction = model.predict(transformedImage)
+
+        predictionLabel = decode_predictions(prediction, top = 5)
+        print(predictionLabel)
+
+        print('%s (%.2f%%)' % (predictionLabel[0][0][1], predictionLabel[0][0][2]*100 ))
+    
+    def cust_dataset(self):
+        train_path = "D:\Project\Final Year\Friend Rcommndation System\Final 2\images\\fruit\\fruits-360-original-size\\fruits-360-original-size\Training"
+        valid_path = "D:\Project\Final Year\Friend Rcommndation System\Final 2\images\\fruit\\fruits-360-original-size\\fruits-360-original-size\Validation"
+
+        image_files = glob(train_path + '/*/*.jp*g')
+        valid_image_files = glob(valid_path + '/*/*.jp*g')
+
+        folders = glob(train_path + '/*')
+
+        IMAGE_SIZE = [100, 100]
+
+        epochs = 1
+        batch_size = 32
+        vgg = VGG16(input_shape=IMAGE_SIZE + [3], weights='imagenet', include_top=False)
+
+        for layer in vgg.layers:
+          layer.trainable = False
+
+        x = Flatten()(vgg.output)
+        prediction = Dense(len(folders), activation='softmax')(x)
+
+        model = Model(inputs=vgg.input, outputs=prediction)
+
+        model.summary()
+
+        model.compile(
+          loss='categorical_crossentropy',
+          optimizer='rmsprop',
+          metrics=['accuracy']
+        )
+
+        gen = ImageDataGenerator(
+          rotation_range=20,
+          width_shift_range=0.1,
+          height_shift_range=0.1,
+          shear_range=0.1,
+          zoom_range=0.2,
+          horizontal_flip=True,
+          vertical_flip=True,
+          rescale=1./255,  
+          preprocessing_function=preprocess_input
+        )
+
+
+        test_gen = gen.flow_from_directory(valid_path, target_size=IMAGE_SIZE)
+        print(test_gen.class_indices)
+        labels = [None] * len(test_gen.class_indices)
+        for k, v in test_gen.class_indices.items():
+          labels[v] = k
+        train_generator = gen.flow_from_directory(
+            train_path,
+            target_size=IMAGE_SIZE,
+            shuffle=True,
+            batch_size=batch_size,
+        )
+        valid_generator = gen.flow_from_directory(
+            valid_path,
+            target_size=IMAGE_SIZE,
+            shuffle=False,
+            batch_size=batch_size,
+        )
+
+        r = model.fit(
+            train_generator,
+            validation_data=valid_generator,
+            epochs=epochs,
+            steps_per_epoch=len(image_files) // batch_size,
+            validation_steps=len(valid_image_files) // batch_size,
+        )
+        plt.plot(r.history['loss'], label='train loss')
+        plt.plot(r.history['val_loss'], label='val loss')
+        plt.legend()
+        plt.show()
+
+        plt.plot(r.history['accuracy'], label='train acc')
+        plt.plot(r.history['val_accuracy'], label='val acc')
+        plt.legend()
+        plt.show()
+
+        print("Final training accuracy = {}".format(r.history["accuracy"][-1]))
+        print("Final validation accuracy = {}".format(r.history["val_accuracy"][-1]))
+
     
 
 class Index:
@@ -165,7 +201,7 @@ class Index:
         image_data['features']  = f_data
         image_data = image_data.dropna().reset_index(drop=True)
         image_data.to_pickle(config.image_data_with_features_pkl)
-        print(image_data.shape)
+
         print("Image Meta Information Saved: [meta-data-files/image_data_features.pkl]")
         return image_data
     def start_indexing(self,image_data):
@@ -211,18 +247,16 @@ class SearchImage:
     def plot_similar_images(self,image_path:str):
         self.image_path = image_path
         query_vector = self.get_query_vector(self.image_path)
-        img_list = list(self.search_by_vector(query_vector,16).values())
-        print(img_list)
+        img_list = list(self.search_by_vector(query_vector,4).values())
         axes=[]
         fig=plt.figure(figsize=(20,15))
-        for a in range(4*4):
-            axes.append(fig.add_subplot(4, 4, a+1))  
+        for a in range(2*2):
+            axes.append(fig.add_subplot(2, 2, a+1))  
             plt.axis('off')
             plt.imshow(Image.open(img_list[a]))
         fig.tight_layout()
         fig.suptitle('Similar Result Found', fontsize=22)
         plt.show(fig)
-        plt.plot()
     def get_similar_images(self,image_path:str,number_of_images:int):
         self.image_path = image_path
         self.number_of_images = number_of_images
@@ -233,17 +267,45 @@ class SearchImage:
         object = pd.read_pickle(config.image_data_with_features_pkl)
         return object['features'][0]
 
+class Encrytion:
+    def __init__(self):
+        self.fileSourcePath = ""
+        self.resultOutputPath = ""
+
+    def pixelateImages(img, name, resultOutputPath) :
+        extension = ".jpg"
+        imgSmall = img.resize((70,70),resample=Image.BILINEAR)
+        result = imgSmall.resize(img.size,Image.NEAREST)
+        print(resultOutputPath+name)
+        result.save(resultOutputPath + name + extension)        
+
+    def iterateAndParseFolder(self,fileSourcePath,resultOutputPath):
+        print(fileSourcePath)
+        images = glob(fileSourcePath)
+        for image in images:
+            with open(image, 'rb') as file:
+                img = Image.open(file)
+                filename = os.path.basename(file.name).split('.')[0]
+                Encrytion.pixelateImages(img, filename,resultOutputPath)
+
+
     
 
-# image_list = LoadData().from_folder(["D:\Project\Final Year\Friend Rcommndation System\OpenCV\Training Set"])
+# image_list = LoadData().from_folder(["D:\Project\Final Year\Friend Rcommndation System\Final 2\Images\\training"])
 # Index(image_list).Start()
-
+#
 # object = pd.read_pickle(config.image_data_with_features_pkl)
 # print(object)
 # fin = SearchImage().get_similar_images(image_path="D:\Project\Final Year\Friend Rcommndation System\OpenCV\Query Image\IMG_20210223_213530_Bokeh.jpg",number_of_images=1)
 # print(fin)
-
+# #
 # fe = FeatureExtractor()
-# fe.acc()
+# # fe.results()
+# fe.cust_dataset()
+#
+# SearchImage().plot_similar_images("D:\Project\Final Year\Friend Rcommndation System\Final 2\Images\query\\00e3c8ff3453fc3224e4a01bb393db1c.jpg")
 
-# SearchImage().plot_similar_images("D:\Project\Final Year\Friend Rcommndation System\OpenCV\Query Image\IMG_20210228_133621_Bokeh.jpg")
+# fileSourcePath = "D:\Project\Final Year\Friend Rcommndation System\Final 2\images\\apparels\images\*.jpg"
+# resultOutputPath = "D:\Project\Final Year\Friend Rcommndation System\Final 2\\target\\blurred_image\\"
+# enc = Encrytion()
+# enc.iterateAndParseFolder(fileSourcePath,resultOutputPath)
