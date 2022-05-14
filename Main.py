@@ -19,6 +19,7 @@ from tensorflow.keras.callbacks import EarlyStopping
 import tensorflow_datasets as tfds
 from tensorflow.keras.utils import to_categorical
 from tensorflow.keras.utils import plot_model
+from sklearn.metrics import confusion_matrix, classification_report
 from keras.preprocessing.image import ImageDataGenerator
 from keras.layers import Input, Lambda, Dense, Flatten
 import tensorflow as tf
@@ -169,7 +170,7 @@ class FeatureExtractor:
         r = model.fit(
             train_generator,
             validation_data=valid_generator,
-            epochs=epochs,
+            epochs=2,
             steps_per_epoch=len(image_files) // batch_size,
             validation_steps=len(valid_image_files) // batch_size,
         )
@@ -182,6 +183,19 @@ class FeatureExtractor:
         plt.plot(r.history['val_accuracy'], label='val acc')
         plt.legend()
         plt.show()
+
+        y_pred_raw = model.predict_generator(valid_generator)
+        y_pred = np.argmax(y_pred_raw, axis=1)
+        class_labels = valid_generator.class_indices
+        class_labels = {v: k for k, v in class_labels.items()}
+        class_list = list(class_labels.values())
+
+        print(valid_generator.samples)
+
+        print("Confusion Matrix")
+        print(confusion_matrix(valid_generator.classes, y_pred))
+        print("Classification Report")
+        print(classification_report(valid_generator.classes, y_pred, target_names=class_list))
 
         print("Final training accuracy = {}".format(r.history["accuracy"][-1]))
         print("Final validation accuracy = {}".format(r.history["val_accuracy"][-1]))
@@ -299,9 +313,9 @@ class Encrytion:
 # fin = SearchImage().get_similar_images(image_path="D:\Project\Final Year\Friend Rcommndation System\OpenCV\Query Image\IMG_20210223_213530_Bokeh.jpg",number_of_images=1)
 # print(fin)
 # #
-# fe = FeatureExtractor()
+fe = FeatureExtractor()
 # # fe.results()
-# fe.cust_dataset()
+fe.cust_dataset()
 #
 # SearchImage().plot_similar_images("D:\Project\Final Year\Friend Rcommndation System\Final 2\Images\query\\00e3c8ff3453fc3224e4a01bb393db1c.jpg")
 
